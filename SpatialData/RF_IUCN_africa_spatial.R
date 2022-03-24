@@ -3,12 +3,15 @@
 library(randomForest)
 library(plyr)
 
-Africa_data<-read.table("Africa_data.txt", sep="\t", header=T)
+Africa_data<-read.table("SpatialData/Africa_data.txt", sep="\t", header=T)
 Africa_data<-as.data.frame(Africa_data)
 
 #############################DATA PREP########################################
 #remove algae
 ordersNLP=c("Acrosiphoniales","Bryopsidales","Cladophorales","Dasycladales","Ignatiales","Oltmansiellopsidales", "Trentepohliales","Ulotrichales","Ulvales","Oedogoniales","Chaetophorales","Chaetopeltidales", "Chlamydomonadales","Sphaeropleales","Chlorellales","Oocystaceae","Microthamniales","Trebouxiales","Pyramimonadales","Prasinococcales","Palmophyllales","Zygnematales","Desmidiales","Charales", "Coleochaetales","Pseudoscourfieldiales","Pedinomonadales","Volvocales")
+
+DATA<-Africa_data
+
 algae_List<-DATA[which(DATA$order %in% ordersNLP),]
 algae_List<-algae_List$species
 Africa_data<-Africa_data[! Africa_data$name %in% algae_List,]
@@ -55,7 +58,7 @@ na_data$dist<-as.factor(na_data$dist)
 NoLC<-c('CR','EN','EW','EX','VU')
 for (i in 1:nrow(pred_data)) {
   if (pred_data$Red.List.status[i] %in% NoLC) {
-    pred_data$rls_LC[i] <-'NoLC' 
+    pred_data$rls_LC[i] <-'NoLC'
   }
   else {
     pred_data$rls_LC[i] <-'LC'
@@ -67,7 +70,7 @@ pred_data$rls_LC<-as.factor(pred_data$rls_LC)
 NoCR<-c('LC','EN','EW','EX','NT','VU')
 for (i in 1:nrow(pred_data)) {
   if (pred_data$Red.List.status[i] %in% NoCR) {
-    pred_data$rls_CR[i] <-'NoCR' 
+    pred_data$rls_CR[i] <-'NoCR'
   }
   else {
     pred_data$rls_CR[i] <-'CR'
@@ -85,7 +88,33 @@ names(pred_data)
 
 #################################
 #1: ALL IUCN CATEGORIES FULL DATA
+
+
+# make folds
+
+outer_folds<-folder(pred_data, resp = "rls_LC")
+my_mod <- "rls_LC ~ abs_max_lat + abs_min_lat + length_lat + median_lon + median_lat + area + bio1m + bio2m + bio3m + bio4m + bio5m + bio6m + bio7m + bio8m + bio9m + bio10m + bio11m + bio12m + bio13m + bio14m + bio15m + bio16m + bio17m + bio18m + bio19m + bio1sd + bio2sd + bio3sd + bio4sd + bio5sd + bio6sd + bio7sd + bio8sd + bio9sd + bio10sd + bio11sd + bio12sd + bio13sd + bio14sd + bio15sd + bio16sd + bio17sd + bio18sd + bio19sd + elevm + elevsd + dist"
+fold_fits <- map(outer_folds, function(fold){
+  tic()
+  cl <- makePSOCKcluster(8)
+  registerDoParallel(cl)
+
+  rf = fit_rf(formu = as.formula(my_mod)
+              , data = pred_data[fold, ]
+              , sampling = NULL
+              , tuneMethod = "repeatedcv"
+              , repeats = 5
+              , max_mtry = 35
+  )
+  stopCluster(cl)
+  print(toc())
+  return(rf)
+})
+
 fitRF <- randomForest(Red.List.status ~ abs_max_lat + abs_min_lat + length_lat + median_lon + median_lat + area + bio1m + bio2m + bio3m + bio4m + bio5m + bio6m + bio7m + bio8m + bio9m + bio10m + bio11m + bio12m + bio13m + bio14m + bio15m + bio16m + bio17m + bio18m + bio19m + bio1sd + bio2sd + bio3sd + bio4sd + bio5sd + bio6sd + bio7sd + bio8sd + bio9sd + bio10sd + bio11sd + bio12sd + bio13sd + bio14sd + bio15sd + bio16sd + bio17sd + bio18sd + bio19sd + elevm + elevsd + dist, data=pred_data, importance=TRUE, ntree=1000, replace=T)
+
+
+
 
 fitRF
 write.csv(fitRF$importance, file="Africa_AllFull_imp.csv")
@@ -124,8 +153,8 @@ NoLC_species_9<-NoLC_species_9$name
 NoLC_species_8<-NoLC_species_8$name
 
 badspecies_8<-c(LC_species_8, NoLC_species_8)
-  
-badspecies_9<-c(LC_species_9, NoLC_species_9) 
+
+badspecies_9<-c(LC_species_9, NoLC_species_9)
 
 ##########################
 #remove bad species at <0.9 of being wrong
@@ -183,24 +212,24 @@ for (i in 1:100) {
   LCsamp<-LC[(sample(nrow(LC), size=81)),]
   VU=pred_data[pred_data$Red.List.status=="VU",]
   VUsamp<-VU[(sample(nrow(VU), size=81)),]
-  
+
   pred_samp=rbind(CR,NTsamp,ENsamp,LCsamp,VUsamp)
-  
+
   fitRF <- randomForest(Red.List.status ~ abs_max_lat + abs_min_lat + length_lat + median_lon + median_lat + area + bio1m + bio2m + bio3m + bio4m + bio5m + bio6m + bio7m + bio8m + bio9m + bio10m + bio11m + bio12m + bio13m + bio14m + bio15m + bio16m + bio17m + bio18m + bio19m + bio1sd + bio2sd + bio3sd + bio4sd + bio5sd + bio6sd + bio7sd + bio8sd + bio9sd + bio10sd + bio11sd + bio12sd + bio13sd + bio14sd + bio15sd + bio16sd + bio17sd + bio18sd + bio19sd + elevm + elevsd, data=pred_samp, importance=TRUE, ntree=1000, replace=T)
-  
+
   imp=fitRF$importance
   write.table(imp,file="Africa_AllSamp_imp.csv", sep=",", append=T, col.names=!file.exists("Africa_ALLSamp_imp.csv"))
 
   err=fitRF$err.rate
   write.table(err, file="Africa_AllSamp_error.csv", sep=",", row.names=FALSE, col.names=FALSE, append=T)
-  
+
   predictRF <- predict(fitRF, newdata=na_data, type="prob")
 
   df<-data.frame(na_data$name, predictRF)
-  
+
   write.table(df,file="Africa_AllSamp_predict.csv", sep=",", row.names=FALSE, col.names=!file.exists("Africa_AllSamp_predict.csv"), append=T)
-}  
-  
+}
+
 oob<-read.csv("Africa_AllSamp_error.csv", header=FALSE)
 names(oob)<-c("oob","CR","EN","LC","NT","VU")
 e<-colMeans(oob)
@@ -225,21 +254,21 @@ for (i in 1:100) {
   LCsamp<-LC[(sample(nrow(LC), size=921)),]
 
   pred_samp=rbind(NoLC, LCsamp)
-  
+
   fitRF <- randomForest(rls_LC ~ abs_max_lat + abs_min_lat + length_lat + median_lon + median_lat + area + bio1m + bio2m + bio3m + bio4m + bio5m + bio6m + bio7m + bio8m + bio9m + bio10m + bio11m + bio12m + bio13m + bio14m + bio15m + bio16m + bio17m + bio18m + bio19m + bio1sd + bio2sd + bio3sd + bio4sd + bio5sd + bio6sd + bio7sd + bio8sd + bio9sd + bio10sd + bio11sd + bio12sd + bio13sd + bio14sd + bio15sd + bio16sd + bio17sd + bio18sd + bio19sd + elevm + elevsd, data=pred_samp, importance=TRUE, ntree=1000, replace=T)
 
   imp=fitRF$importance
   write.table(imp,file="Africa_LCSamp_imp.csv", sep=",", append=T, col.names=!file.exists("Africa_LCSamp_imp.csv"))
-  
+
   err=fitRF$err.rate
   write.table(err, file="Africa_LCSamp_error.csv", sep=",", row.names=FALSE, col.names=FALSE, append=T)
-  
+
   predictRF <- predict(fitRF, newdata=na_data, type="prob")
-  
+
   df<-data.frame(na_data$name, predictRF)
-  
+
   write.table(df,file="Africa_LCSamp_predict.csv", sep=",", row.names=FALSE, col.names=!file.exists("Africa_LCSamp_predict.csv"), append=T)
-}  
+}
 
 oob<-read.csv("Africa_LCSamp_error.csv", header=FALSE)
 names(oob)<-c("oob","LC", "NoLC")
@@ -263,23 +292,23 @@ for (i in 1:100) {
   CR=pred_data[pred_data$rls_CR=="CR",]
   noCR=pred_data[pred_data$rls_CR=="NoCR",]
   noCRsamp<-noCR[(sample(nrow(noCR), size=81)),]
-  
+
   pred_samp=rbind(CR, noCRsamp)
-  
+
   fitRF <- randomForest(rls_CR ~ abs_max_lat + abs_min_lat + length_lat + median_lon + median_lat + area + bio1m + bio2m + bio3m + bio4m + bio5m + bio6m + bio7m + bio8m + bio9m + bio10m + bio11m + bio12m + bio13m + bio14m + bio15m + bio16m + bio17m + bio18m + bio19m + bio1sd + bio2sd + bio3sd + bio4sd + bio5sd + bio6sd + bio7sd + bio8sd + bio9sd + bio10sd + bio11sd + bio12sd + bio13sd + bio14sd + bio15sd + bio16sd + bio17sd + bio18sd + bio19sd + elevm + elevsd, data=pred_samp, importance=TRUE, ntree=1000, replace=T)
-  
+
   imp=fitRF$importance
   write.table(imp,file="Africa_CRSamp_imp.csv", sep=",", append=T, col.names=!file.exists("Africa_CRSamp_imp.csv"))
-  
+
   err=fitRF$err.rate
   write.table(err, file="Africa_CRSamp_error.csv", sep=",", row.names=FALSE, col.names=FALSE, append=T)
-  
+
   predictRF <- predict(fitRF, newdata=na_data, type="prob")
-  
+
   df<-data.frame(na_data$name, predictRF)
-  
+
   write.table(df,file="Africa_CRSamp_predict.csv", sep=",", row.names=FALSE, col.names=!file.exists("Africa_CRSamp_predict.csv"), append=T)
-}  
+}
 
 oob<-read.csv("Africa_CRSamp_error.csv", header=FALSE)
 names(oob)<-c("oob","CR","NoCR")
@@ -343,7 +372,7 @@ pred_data$Red.List.status<-as.factor(pred_data$Red.List.status)
 NoLC<-c('CR','EN','EW','EX','VU')
 for (i in 1:nrow(pred_data)) {
   if (pred_data$Red.List.status[i] %in% NoLC) {
-    pred_data$rls_LC[i] <-'NoLC' 
+    pred_data$rls_LC[i] <-'NoLC'
   }
   else {
     pred_data$rls_LC[i] <-'LC'
@@ -355,7 +384,7 @@ pred_data$rls_LC<-as.factor(pred_data$rls_LC)
 NoCR<-c('LC','EN','EW','EX','NT','VU')
 for (i in 1:nrow(pred_data)) {
   if (pred_data$Red.List.status[i] %in% NoCR) {
-    pred_data$rls_CR[i] <-'NoCR' 
+    pred_data$rls_CR[i] <-'NoCR'
   }
   else {
     pred_data$rls_CR[i] <-'CR'
@@ -405,7 +434,7 @@ NoLC_species_8<-NoLC_species_8$name
 
 badspecies_8<-c(LC_species_8, NoLC_species_8)
 
-badspecies_9<-c(LC_species_9, NoLC_species_9) 
+badspecies_9<-c(LC_species_9, NoLC_species_9)
 
 ##########################
 #remove bad species at <0.9 of being wrong
@@ -462,23 +491,23 @@ for (i in 1:100) {
   LCsamp<-LC[(sample(nrow(LC), size=71)),]
   VU=pred_data[pred_data$Red.List.status=="VU",]
   VUsamp<-VU[(sample(nrow(VU), size=71)),]
-  
+
   pred_samp=rbind(CR,NTsamp,ENsamp,LCsamp,VUsamp)
-  
+
   fitRF <- randomForest(Red.List.status ~ abs_max_lat + abs_min_lat + length_lat + median_lon + median_lat + area + bio1m + bio2m + bio3m + bio4m + bio5m + bio6m + bio7m + bio8m + bio9m + bio10m + bio11m + bio12m + bio13m + bio14m + bio15m + bio16m + bio17m + bio18m + bio19m + bio1sd + bio2sd + bio3sd + bio4sd + bio5sd + bio6sd + bio7sd + bio8sd + bio9sd + bio10sd + bio11sd + bio12sd + bio13sd + bio14sd + bio15sd + bio16sd + bio17sd + bio18sd + bio19sd + elevm + elevsd, data=pred_samp, importance=TRUE, ntree=1000, replace=T)
-  
+
   imp=fitRF$importance
   write.table(imp,file="Africa_ALLSampEnd_imp.csv", sep=",", append=T, col.names=!file.exists("Africa_ALLSampEnd_imp.csv"))
-  
+
   err=fitRF$err.rate
   write.table(err, file="Africa_ALLSampEnd_error.csv", sep=",", row.names=FALSE, col.names=FALSE, append=T)
-  
+
   predictRF <- predict(fitRF, newdata=na_data, type="prob")
-  
+
   df<-data.frame(na_data$name, predictRF)
-  
+
   write.table(df,file="Africa_AllSampEnd_predict.csv", sep=",", row.names=FALSE, col.names=!file.exists("Africa_AllSampEnd_predict.csv"), append=T)
-}  
+}
 
 oob<-read.csv("Africa_ALLSampEnd_error.csv", header=FALSE)
 names(oob)<-c("oob","CR","EN","LC","NT","VU")
@@ -502,23 +531,23 @@ for (i in 1:100) {
   LC=pred_data[pred_data$rls_LC=="LC",]
   NoLC=pred_data[pred_data$rls_LC=="NoLC",]
   NoLCsamp<-NoLC[(sample(nrow(NoLC), size=635)),]
-  
+
   pred_samp=rbind(LC, NoLCsamp)
-  
+
   fitRF <- randomForest(rls_LC ~ abs_max_lat + abs_min_lat + length_lat + median_lon + median_lat + area + bio1m + bio2m + bio3m + bio4m + bio5m + bio6m + bio7m + bio8m + bio9m + bio10m + bio11m + bio12m + bio13m + bio14m + bio15m + bio16m + bio17m + bio18m + bio19m + bio1sd + bio2sd + bio3sd + bio4sd + bio5sd + bio6sd + bio7sd + bio8sd + bio9sd + bio10sd + bio11sd + bio12sd + bio13sd + bio14sd + bio15sd + bio16sd + bio17sd + bio18sd + bio19sd + elevm + elevsd, data=pred_samp, importance=TRUE, ntree=1000, replace=T)
-  
+
   imp=fitRF$importance
   write.table(imp,file="Africa_LCSampEnd_imp.csv", sep=",", append=T, col.names=!file.exists("Africa_LCSampEnd_imp.csv"))
-  
+
   err=fitRF$err.rate
   write.table(err, file="Africa_LCSampEnd_error.csv", sep=",", row.names=FALSE, col.names=FALSE, append=T)
-  
+
   predictRF <- predict(fitRF, newdata=na_data, type="prob")
-  
+
   df<-data.frame(na_data$name, predictRF)
-  
+
   write.table(df,file="Africa_LCSampEnd_predict.csv", sep=",", row.names=FALSE, col.names=!file.exists("Africa_LCSampEnd_predict.csv"), append=T)
-}  
+}
 
 oob<-read.csv("Africa_LCSampEnd_error.csv", header=FALSE)
 names(oob)<-c("oob","LC", "NoLC")
@@ -542,23 +571,23 @@ for (i in 1:100) {
   CR=pred_data[pred_data$rls_CR=="CR",]
   noCR=pred_data[pred_data$rls_CR=="NoCR",]
   noCRsamp<-noCR[(sample(nrow(noCR), size=71)),]
-  
+
   pred_samp=rbind(CR, noCRsamp)
-  
+
   fitRF <- randomForest(rls_CR ~ abs_max_lat + abs_min_lat + length_lat + median_lon + median_lat + area + bio1m + bio2m + bio3m + bio4m + bio5m + bio6m + bio7m + bio8m + bio9m + bio10m + bio11m + bio12m + bio13m + bio14m + bio15m + bio16m + bio17m + bio18m + bio19m + bio1sd + bio2sd + bio3sd + bio4sd + bio5sd + bio6sd + bio7sd + bio8sd + bio9sd + bio10sd + bio11sd + bio12sd + bio13sd + bio14sd + bio15sd + bio16sd + bio17sd + bio18sd + bio19sd + elevm + elevsd, data=pred_samp, importance=TRUE, ntree=1000, replace=T)
-  
+
   imp=fitRF$importance
   write.table(imp,file="Africa_CRSampEnd_imp.csv", sep=",", append=T, col.names=!file.exists("Africa_CRSampEnd_imp.csv"))
-  
+
   err=fitRF$err.rate
   write.table(err, file="Africa_CRSampEnd_error.csv", sep=",", row.names=FALSE, col.names=FALSE, append=T)
-  
+
   predictRF <- predict(fitRF, newdata=na_data, type="prob")
-  
+
   df<-data.frame(na_data$name, predictRF)
-  
+
   write.table(df,file="Africa_CRSampEnd_predict.csv", sep=",", row.names=FALSE, col.names=!file.exists("Africa_CRSampEnd_predict.csv"), append=T)
-}  
+}
 
 oob<-read.csv("Africa_CRSampEnd_error.csv", header=FALSE)
 names(oob)<-c("oob","CR","NoCR")
@@ -575,4 +604,3 @@ imps<-read.csv("Africa_CRSampEnd_imp.csv")
 n<-aggregate(imps$MeanDecreaseAccuracy, list(imps$Variable), mean)
 write.csv(n, file="Africa_CRSampEnd_avg_imp.csv", row.names=FALSE)
 
-  
