@@ -113,7 +113,27 @@ fold_fits <- map(outer_folds, function(fold){
   return(rf)
 })
 
+save(fold_fits, file ="nested_CV_global_fits.RDA")
 
+subdata<-pred_data %>% select(-c("rls_LC", "Red.List.status", "rls_CR", "Species", "n.gps", "continents", "dist"))
+names(subdata)
+
+m_assess<- assess_method(fits = 'fold_fits'
+                         , subdat = "subdata"
+                         , fulldat = "pred_data"
+                         , resp = "rls_LC"
+                         , pos = "NoLC"
+                         , neg = "LC")
+
+m_assess %>% summarize(across(.fns =list(mean = mean, sd = sd)))
+
+m_assess %>% ggplot(aes(out_auc)) + geom_histogram()+ theme_classic()
+
+m_assess %>% ggplot(aes(mtry, out_auc)) +
+  geom_point()+
+  theme_classic()
+
+summary(lm(out_auc~mtry, data = m_assess))
 #################################
 #1: ALL IUCN CATEGORIES FULL DATA
 fitRF <- randomForest(Red.List.status ~ abs_max_lat + abs_min_lat + length_lat + median_lon + median_lat + area + bio1m + bio2m + bio3m + bio4m + bio5m + bio6m + bio7m + bio8m + bio9m + bio10m + bio11m + bio12m + bio13m + bio14m + bio15m + bio16m + bio17m + bio18m + bio19m + bio1sd + bio2sd + bio3sd + bio4sd + bio5sd + bio6sd + bio7sd + bio8sd + bio9sd + bio10sd + bio11sd + bio12sd + bio13sd + bio14sd + bio15sd + bio16sd + bio17sd + bio18sd + bio19sd + elevm + elevsd, data=pred_data, importance=TRUE, ntree=1000, replace=T)

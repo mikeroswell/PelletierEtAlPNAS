@@ -125,3 +125,40 @@ nomatch<-function(x, y){
     all(y[ ,x.name] %in% x[ ,x.name])
   })]
 }
+
+assess_method <- function(fits = "fold_fits"
+                          , subdat = "classy" 
+                          , fulldat = "main"
+                          , folds = "outer_folds"
+                          , resp = "simple_status_mu"
+                          , pos = "threatened"
+                          , neg = "secure"){
+  map_dfr(1:length(get(fits)), function(x){
+    out.dat = get(subdat)[-get(folds)[[x]], ]
+    mod = get(fits)[[x]]
+    remod = fix.mod(mod, out.dat, resp = resp)
+    pre = predict(remod
+                  , out.dat 
+                  , type = "prob")
+    predictions = prediction(pre[,2], get(fulldat)[-get(folds)[[x]], resp])
+    preval = predict(remod, out.dat)
+    in_auc = remod$results %>% 
+      filter(mtry == remod$finalModel$mtry) %>% 
+      pull(ROC)
+    out_auc = performance(predictions, measure = "auc")@y.values[[1]] 
+    #roc(response = example_train_dat[-y, 2], predictor = pre$Yes)
+    data.frame(
+      accuracy = sum(preval == get(fulldat)[-get(folds)[[x]],] %>% pull(get(resp)))/length(preval)
+      , oob_accuracy = 1- mean(remod$finalModel$err.rate[, 1])
+      , threat_acc = 1- mean(remod$finalModel$err.rate[, 2])
+      , sec_acc = 1- mean(remod$finalModel$err.rate[, 3])
+      , n_threat =  sum(get(fulldat)[-get(folds)[[x]], resp]== pos)
+      , n_sec =  sum(get(fulldat)[-get(folds)[[x]], resp]== neg)
+      , in_auc 
+      , out_auc  # = as.numeric(my_auc$auc)
+      , mod = x
+      , mtry = get(fits)[[x]]$finalModel$mtry
+    )
+  })    
+}
+
