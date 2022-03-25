@@ -90,26 +90,7 @@ names(pred_data)
 #1: ALL IUCN CATEGORIES FULL DATA
 
 
-# make folds
 
-outer_folds<-folder(pred_data, resp = "rls_LC")
-my_mod <- "rls_LC ~ abs_max_lat + abs_min_lat + length_lat + median_lon + median_lat + area + bio1m + bio2m + bio3m + bio4m + bio5m + bio6m + bio7m + bio8m + bio9m + bio10m + bio11m + bio12m + bio13m + bio14m + bio15m + bio16m + bio17m + bio18m + bio19m + bio1sd + bio2sd + bio3sd + bio4sd + bio5sd + bio6sd + bio7sd + bio8sd + bio9sd + bio10sd + bio11sd + bio12sd + bio13sd + bio14sd + bio15sd + bio16sd + bio17sd + bio18sd + bio19sd + elevm + elevsd + dist"
-fold_fits <- map(outer_folds, function(fold){
-  tic()
-  cl <- makePSOCKcluster(8)
-  registerDoParallel(cl)
-
-  rf = fit_rf(formu = as.formula(my_mod)
-              , data = pred_data[fold, ]
-              , sampling = NULL
-              , tuneMethod = "repeatedcv"
-              , repeats = 5
-              , max_mtry = 35
-  )
-  stopCluster(cl)
-  print(toc())
-  return(rf)
-})
 
 fitRF <- randomForest(Red.List.status ~ abs_max_lat + abs_min_lat + length_lat + median_lon + median_lat + area + bio1m + bio2m + bio3m + bio4m + bio5m + bio6m + bio7m + bio8m + bio9m + bio10m + bio11m + bio12m + bio13m + bio14m + bio15m + bio16m + bio17m + bio18m + bio19m + bio1sd + bio2sd + bio3sd + bio4sd + bio5sd + bio6sd + bio7sd + bio8sd + bio9sd + bio10sd + bio11sd + bio12sd + bio13sd + bio14sd + bio15sd + bio16sd + bio17sd + bio18sd + bio19sd + elevm + elevsd + dist, data=pred_data, importance=TRUE, ntree=1000, replace=T)
 

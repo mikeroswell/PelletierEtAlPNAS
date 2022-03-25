@@ -2,22 +2,22 @@
 
 library(randomForest)
 library(plyr)
-
+unzip("SpatialData/global_data.zip")
 global_data<-read.table("global_data.txt", sep="\t", header=T)
 global_data<-as.data.frame(global_data)
-
+DATA <- global_data
 #############################DATA PREP########################################
 #remove algae
 ordersNLP=c("Acrosiphoniales","Bryopsidales","Cladophorales","Dasycladales","Ignatiales","Oltmansiellopsidales", "Trentepohliales","Ulotrichales","Ulvales","Oedogoniales","Chaetophorales","Chaetopeltidales", "Chlamydomonadales","Sphaeropleales","Chlorellales","Oocystaceae","Microthamniales","Trebouxiales","Pyramimonadales","Prasinococcales","Palmophyllales","Zygnematales","Desmidiales","Charales", "Coleochaetales","Pseudoscourfieldiales","Pedinomonadales","Volvocales")
 
-#import each cont occurrence file and get algae species
-temp<-DATA[which(DATA$order %in% ordersNLP),]
-temp<-temp$species
-#algaeList<-temp
-algaeList<-append(algaeList, temp)
-algaeList<-unique(algaeList)
-
-global_data<-global_data[! global_data$name %in% algaeList,]
+# #import each cont occurrence file and get algae species
+# temp<-DATA[which(DATA$order %in% ordersNLP),]
+# temp<-temp$species
+# algaeList<-temp
+# algaeList<-append(algaeList, temp)
+# algaeList<-unique(algaeList)
+# 
+# global_data<-global_data[! global_data$name %in% algaeList,]
 
 #change red List status to follow newest Listings
 global_data$Red.List.status[global_data$Red.List.status == "LR/nt"] <-"NT"
@@ -79,12 +79,40 @@ for (i in 1:nrow(pred_data)) {
 pred_data$rls_CR<-as.factor(pred_data$rls_CR)
 
 
+
+
 #explore data for rf input
 apply(pred_data, 2, function(pred_data)length(unique(pred_data)))
 table(pred_data$Red.List.status)
 table(pred_data$rls_LC)
 table(pred_data$rls_CR)
 names(pred_data)
+
+
+
+### # make folds
+
+source("additional_code/nested_CV_machinery.R")
+
+outer_folds<-folder(pred_data, resp = "rls_LC")
+my_mod <- "rls_LC ~ abs_max_lat + abs_min_lat + length_lat + median_lon + median_lat + area + bio1m + bio2m + bio3m + bio4m + bio5m + bio6m + bio7m + bio8m + bio9m + bio10m + bio11m + bio12m + bio13m + bio14m + bio15m + bio16m + bio17m + bio18m + bio19m + bio1sd + bio2sd + bio3sd + bio4sd + bio5sd + bio6sd + bio7sd + bio8sd + bio9sd + bio10sd + bio11sd + bio12sd + bio13sd + bio14sd + bio15sd + bio16sd + bio17sd + bio18sd + bio19sd + elevm + elevsd"
+fold_fits <- map(outer_folds, function(fold){
+  tic()
+  cl <- makePSOCKcluster(16)
+  registerDoParallel(cl)
+  
+  rf = fit_rf(formu = as.formula(my_mod)
+              , data = pred_data[fold, ]
+              , sampling = NULL
+              , tuneMethod = "repeatedcv"
+              , repeats = 5
+              , max_mtry = 35
+  )
+  stopCluster(cl)
+  print(toc())
+  return(rf)
+})
+
 
 #################################
 #1: ALL IUCN CATEGORIES FULL DATA
@@ -99,6 +127,8 @@ write.csv(df, file="global_AllFull_pred.csv", row.names=FALSE)
 
 ##########################
 #2: LC vs non-LC FULL DATA
+
+
 fitRF <- randomForest(rls_LC ~ abs_max_lat + abs_min_lat + length_lat + median_lon + median_lat + area + bio1m + bio2m + bio3m + bio4m + bio5m + bio6m + bio7m + bio8m + bio9m + bio10m + bio11m + bio12m + bio13m + bio14m + bio15m + bio16m + bio17m + bio18m + bio19m + bio1sd + bio2sd + bio3sd + bio4sd + bio5sd + bio6sd + bio7sd + bio8sd + bio9sd + bio10sd + bio11sd + bio12sd + bio13sd + bio14sd + bio15sd + bio16sd + bio17sd + bio18sd + bio19sd + elevm + elevsd, data=pred_data, importance=TRUE, ntree=1000, replace=T, votes=T)
 
 fitRF
